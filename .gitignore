@@ -23,10 +23,17 @@
 *.pem
 
 # debug
+*.log
+/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Local screenshots and review captures. Intentional app assets belong in /public.
+/captures/
+/imgs/
+/screenshots/
 
 # Local configuration and secrets. Only the documented template is public.
 .env*

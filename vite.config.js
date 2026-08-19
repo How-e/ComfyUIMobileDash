@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
+import { localAiPlugin } from "./server/localAiController.mjs";
 
 function comfyUrl(value) {
   const url = new URL(value || "http://127.0.0.1:8188");
@@ -21,7 +22,13 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    esbuild: { jsx: "automatic", jsxImportSource: "preact" },
+    plugins: [localAiPlugin({ comfyUrl: target })],
+    oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+    optimizeDeps: {
+      rolldownOptions: {
+        transform: { jsx: { runtime: "automatic", importSource: "preact" } },
+      },
+    },
     server: { proxy: comfyProxy },
     preview: { proxy: comfyProxy },
   };
