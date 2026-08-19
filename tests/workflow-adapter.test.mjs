@@ -30,6 +30,24 @@ test("normalizes the bundled API workflow without a ComfyUI installation", () =>
   assert.deepEqual(normalizeWorkflow(sampleWorkflow), sampleWorkflow);
 });
 
+test("converts named widget objects and fills newly added required defaults", () => {
+  const workflow = {
+    nodes: [{ id: 1, type: "OutputNode", mode: 0, inputs: [], widgets_values: { title: "saved", preview: { ignored: true } } }],
+    links: [],
+  };
+  const info = {
+    OutputNode: {
+      output_node: true,
+      input: { required: {
+        title: ["STRING", { default: "default" }],
+        new_option: ["INT", { default: 3 }],
+      } },
+      input_order: { required: ["title", "new_option"] },
+    },
+  };
+  assert.deepEqual(convertCanvasWorkflow(workflow, info)["1"].inputs, { title: "saved", new_option: 3 });
+});
+
 async function load(name) {
   if (!workflowRoot) throw new Error("No ComfyUI workflow directory was found");
   return JSON.parse((await readFile(new URL(name, workflowRoot), "utf8")).replace(/^\uFEFF/, ""));
@@ -56,7 +74,8 @@ async function getObjectInfo(workflow) {
 function missingRequired(prompt, objectInfo) {
   return Object.entries(prompt).flatMap(([id, node]) => {
     const required = Object.keys(objectInfo[node.class_type]?.input?.required || {});
-    return required.filter((name) => !(name in node.inputs)).map((name) => `${id}:${node.class_type}.${name}`);
+    return required.filter((name) => !(name in node.inputs) && !Object.keys(node.inputs).some((key) => key.startsWith(`${name}.`)))
+      .map((name) => `${id}:${node.class_type}.${name}`);
   });
 }
 
@@ -68,6 +87,11 @@ test("converts the saved MiniMax H3 subgraph workflow", async (t) => {
   assert.ok(Object.values(prompt).some((node) => node.class_type === "LoadImage"));
   assert.ok(Object.values(prompt).some((node) => node.class_type === "LoraLoaderModelOnly"));
   assert.ok(Object.values(prompt).some((node) => Object.values(node._meta?.inputLabels || {}).includes("duration")));
+  const math = Object.values(prompt).find((node) => node.class_type === "ComfyMathExpression");
+  const duration = Object.entries(prompt).find(([, node]) => node.class_type === "PrimitiveFloat")?.[0];
+  assert.ok(math, "converted workflow should retain its duration expression");
+  assert.deepEqual(math.inputs["values.a"], [duration, 0]);
+  assert.equal("values" in math.inputs, false, "dotted ComfyUI input names must remain literal keys");
   assert.equal(Object.values(prompt).some((node) => /^[0-9a-f-]{36}$/i.test(node.class_type)), false);
   assert.deepEqual(missingRequired(prompt, objectInfo), []);
 });

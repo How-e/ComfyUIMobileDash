@@ -48,8 +48,22 @@ function isWidgetSpec(spec) {
 
 function widgetValues(node, info) {
   const validNames = new Set(specEntries(info).map(([name]) => name));
-  if (node.widgets_values_named && typeof node.widgets_values_named === "object") {
-    return Object.fromEntries(Object.entries(node.widgets_values_named).filter(([name]) => validNames.has(name)));
+  const named = node.widgets_values_named && typeof node.widgets_values_named === "object"
+    ? node.widgets_values_named
+    : node.widgets_values && typeof node.widgets_values === "object" && !Array.isArray(node.widgets_values)
+      ? node.widgets_values
+      : null;
+  if (named) {
+    const values = Object.fromEntries(Object.entries(named).filter(([name]) => validNames.has(name)));
+    for (const [name, spec] of specEntries(info)) {
+      if (name in values || !isWidgetSpec(spec)) continue;
+      if ((node.inputs || []).some((input) => input.name === name && input.link != null)) continue;
+      const options = spec?.[1] || {};
+      if ("default" in options) values[name] = clone(options.default);
+      else if (Array.isArray(spec?.[0]) && spec[0].length) values[name] = clone(spec[0][0]);
+      else if (Array.isArray(options.options) && options.options.length) values[name] = clone(options.options[0]);
+    }
+    return values;
   }
 
   const raw = node.widgets_values === undefined || node.widgets_values === null
@@ -64,6 +78,14 @@ function widgetValues(node, info) {
     if (cursor < raw.length) values[name] = clone(raw[cursor]);
     cursor += 1;
     if (spec?.[1]?.control_after_generate && cursor < raw.length) cursor += 1;
+  }
+  for (const [name, spec] of specEntries(info)) {
+    if (name in values || !isWidgetSpec(spec)) continue;
+    if ((node.inputs || []).some((input) => input.name === name && input.link != null)) continue;
+    const options = spec?.[1] || {};
+    if ("default" in options) values[name] = clone(options.default);
+    else if (Array.isArray(spec?.[0]) && spec[0].length) values[name] = clone(spec[0][0]);
+    else if (Array.isArray(options.options) && options.options.length) values[name] = clone(options.options[0]);
   }
   return values;
 }
@@ -88,10 +110,9 @@ function makeContext(graph, prefix = "") {
 function outputId(context, id) { return `${context.prefix}${id}`; }
 
 function assignInput(inputs, name, value) {
-  const [root, ...rest] = name.split(".");
-  if (!rest.length) { inputs[root] = value; return; }
-  inputs[root] = inputs[root] && typeof inputs[root] === "object" && !Array.isArray(inputs[root]) ? inputs[root] : {};
-  inputs[root][rest.join(".")] = value;
+  // Dots are valid characters in ComfyUI API input names (for example
+  // `values.a`); they do not represent nested object paths.
+  inputs[name] = value;
 }
 
 function linkedNodeIds(value, found = []) {

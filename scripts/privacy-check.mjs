@@ -10,6 +10,7 @@ const rules = [
   ["email address", /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi],
   ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/g],
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g],
+  ["bearer token", /\bBearer\s+[A-Za-z0-9._~-]{16,}\b/gi],
   ["assigned credential", /\b(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token)\s*[:=]\s*["']?[^\s"'${}]{8,}/gi],
 ];
 
