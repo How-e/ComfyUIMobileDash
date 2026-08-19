@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 
 const comfyProxy = {
   "/comfy": {
@@ -15,7 +14,7 @@ const comfyProxy = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  esbuild: { jsx: "automatic", jsxImportSource: "preact" },
   server: { proxy: comfyProxy },
   preview: { proxy: comfyProxy },
 });

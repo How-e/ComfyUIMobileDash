@@ -2,6 +2,23 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const noteTypes = new Set(["MarkdownNote", "Note"]);
 
+export function workflowClassTypes(json) {
+  const candidate = json?.output || json?.prompt || json;
+  if (candidate && !Array.isArray(candidate) && typeof candidate === "object") {
+    const nodes = Object.values(candidate);
+    if (nodes.length && nodes.every((node) => node?.class_type && node?.inputs)) {
+      return [...new Set(nodes.map((node) => node.class_type))];
+    }
+  }
+
+  if (!Array.isArray(json?.nodes)) return [];
+  const subgraphIds = new Set((json.definitions?.subgraphs || []).map((definition) => definition.id));
+  const graphs = [json, ...(json.definitions?.subgraphs || [])];
+  return [...new Set(graphs.flatMap((graph) => (graph.nodes || [])
+    .filter((node) => (node.mode ?? 0) === 0 && !noteTypes.has(node.type) && !subgraphIds.has(node.type))
+    .map((node) => node.type)))];
+}
+
 function linksFor(graph) {
   return new Map((graph.links || []).map((link) => {
     if (Array.isArray(link)) {

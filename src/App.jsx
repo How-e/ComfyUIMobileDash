@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   Activity, Check, ChevronDown, CircleStop, FileJson, FolderOpen, GalleryHorizontalEnd, Image as ImageIcon,
   ListFilter, LoaderCircle, Maximize2, Minus, Play, Plus, RefreshCw, Search,
   SlidersHorizontal, Sparkles, Trash2, Upload, Wifi, WifiOff, X,
-} from "lucide-react";
+} from "lucide-preact";
 import { sampleWorkflow } from "./sampleWorkflow";
-import { normalizeWorkflow, priorityForNode } from "./workflowAdapter";
+import { normalizeWorkflow, priorityForNode, workflowClassTypes } from "./workflowAdapter";
 
 const makeClientId = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -84,6 +84,9 @@ export default function App() {
   const clientId = useRef(makeClientId());
   const activePromptRef = useRef(activePromptId);
   const finishPromptRef = useRef(null);
+  const objectInfoRef = useRef({});
+  const objectInfoRequests = useRef(new Map());
+  const objectInfoBaseRef = useRef(base);
 
   useEffect(() => {
     activePromptRef.current = activePromptId;
@@ -98,14 +101,30 @@ export default function App() {
     return response.headers.get("content-type")?.includes("json") ? response.json() : response;
   }, [base]);
 
+  const loadObjectInfo = useCallback(async (json) => {
+    const types = workflowClassTypes(json);
+    const fetchType = (type) => {
+      if (objectInfoRef.current[type]) return Promise.resolve();
+      if (!objectInfoRequests.current.has(type)) {
+        objectInfoRequests.current.set(type, request(`/object_info/${encodeURIComponent(type)}`)
+          .then((info) => {
+            if (objectInfoBaseRef.current === base) objectInfoRef.current = { ...objectInfoRef.current, ...info };
+          })
+          .finally(() => objectInfoRequests.current.delete(type)));
+      }
+      return objectInfoRequests.current.get(type);
+    };
+    await Promise.all(types.map(fetchType));
+    setObjectInfo(objectInfoRef.current);
+    return objectInfoRef.current;
+  }, [request]);
+
   const testConnection = useCallback(async (quiet = false) => {
     try {
-      const [, info, files] = await Promise.all([
+      const [, files] = await Promise.all([
         request("/system_stats"),
-        request("/object_info"),
         request("/v2/userdata?path=workflows"),
       ]);
-      setObjectInfo(info || {});
       setSavedWorkflows((files || []).filter((item) => item.type === "file" && item.name.toLowerCase().endsWith(".json")));
       setConnected(true);
       if (!quiet) setNotice(`Connected — ${files?.filter((item) => item.type === "file" && item.name.toLowerCase().endsWith(".json")).length || 0} saved workflows found.`);
@@ -192,7 +211,9 @@ export default function App() {
   async function openFile(file) {
     if (!file) return;
     try {
-      const next = normalizeWorkflow(JSON.parse((await file.text()).replace(/^\uFEFF/, "")), objectInfo);
+      const json = JSON.parse((await file.text()).replace(/^\uFEFF/, ""));
+      const info = await loadObjectInfo(json);
+      const next = normalizeWorkflow(json, info);
       setWorkflow(next);
       setWorkflowName(file.name.replace(/\.json$/i, ""));
       setImages([]);
@@ -204,7 +225,8 @@ export default function App() {
     setNotice(`Opening ${item.name}…`);
     try {
       const json = await request(`/userdata/${encodeURIComponent(item.path)}`);
-      const next = normalizeWorkflow(json, objectInfo);
+      const info = await loadObjectInfo(json);
+      const next = normalizeWorkflow(json, info);
       setWorkflow(next);
       setWorkflowName(item.name.replace(/\.json$/i, ""));
       setImages([]);
@@ -262,6 +284,12 @@ export default function App() {
 
   function saveConnection() {
     const next = normalizeBase(draftBase);
+    if (next !== base) {
+      objectInfoBaseRef.current = next;
+      objectInfoRef.current = {};
+      objectInfoRequests.current.clear();
+      setObjectInfo({});
+    }
     setBase(next); localStorage.setItem("comfydeck.base", next); setConnectionOpen(false);
   }
 
