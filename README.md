@@ -9,7 +9,18 @@ A local, touch-first dashboard for opening and running ComfyUI API-format workfl
 3. Open the LAN URL printed by Vite on your mobile device.
 4. Tap **Workflows** in Comfy Deck and choose any workflow saved in ComfyUI.
 
-The default `/comfy` connection is proxied to `127.0.0.1:8188` on this PC, so no CORS flag is needed. If ComfyUI runs on a different computer, open the connection sheet and enter its full LAN URL; that server must permit the dashboard origin with ComfyUI's `--enable-cors-header` option.
+The dashboard automatically uses ComfyUI at `127.0.0.1:8188`, so the common portable installation needs no path configuration or CORS flag. If ComfyUI uses another address, run `configure-dashboard.bat`; the chosen values are saved only in the ignored `.env.local` file. You can also copy `.env.example` manually or set `COMFYUI_URL` in the shell.
+
+If ComfyUI runs on another computer, you may instead open the connection sheet in the dashboard and enter its full LAN URL. That server must permit the dashboard origin with ComfyUI's `--enable-cors-header` option.
+
+## Portable configuration
+
+- `COMFYUI_URL` controls the server-side Vite proxy and defaults to `http://127.0.0.1:8188`.
+- `COMFYUI_WORKFLOW_DIR` points integration tests at an installed workflow folder. Tests also detect common adjacent ComfyUI layouts automatically.
+- `.env.local` is deliberately ignored by Git. Never put credentials, personal paths, workflow files, prompts, or generated media in tracked files.
+- Run `npm run privacy:check` before publishing. It reports locations only and never prints a detected value.
+
+The application does not need a filesystem path to ComfyUI during normal use; it discovers saved workflows through ComfyUI's API.
 
 ## Current capabilities
 
