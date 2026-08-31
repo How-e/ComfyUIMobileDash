@@ -10,6 +10,11 @@ function comfyUrl(value) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const target = comfyUrl(env.COMFYUI_URL || process.env.COMFYUI_URL);
+  const lmStudioUrl = env.LMSTUDIO_URL || env.LM_STUDIO_URL || process.env.LMSTUDIO_URL || process.env.LM_STUDIO_URL;
+  const presetDir = env.LMSTUDIO_PRESET_DIR || process.env.LMSTUDIO_PRESET_DIR;
+  const host = env.HOST || process.env.HOST || env.VITE_HOST || process.env.VITE_HOST || "0.0.0.0";
+  const port = Number(env.PORT || process.env.PORT || env.VITE_PORT || process.env.VITE_PORT || 5173);
+
   const comfyProxy = {
     "/comfy": {
       target,
@@ -22,14 +27,15 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [localAiPlugin({ comfyUrl: target })],
+    plugins: [localAiPlugin({ comfyUrl: target, lmStudioUrl, presetDir })],
     oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
     optimizeDeps: {
       rolldownOptions: {
         transform: { jsx: { runtime: "automatic", importSource: "preact" } },
       },
     },
-    server: { proxy: comfyProxy },
-    preview: { proxy: comfyProxy },
+    server: { host, port, proxy: comfyProxy },
+    preview: { host, port, proxy: comfyProxy },
   };
 });
+

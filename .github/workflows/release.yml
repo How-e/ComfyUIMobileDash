@@ -1,0 +1,36 @@
+﻿name: Release Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run privacy:check
+      - run: npm test
+      - run: npm run build:release
+      - name: Create release zip archive
+        run: |
+          cd dist-release
+          zip -r ../comfy-deck-release.zip .
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: comfy-deck-release.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

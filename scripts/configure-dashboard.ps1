@@ -1,12 +1,21 @@
 $ErrorActionPreference = "Stop"
 
-$defaultUrl = "http://127.0.0.1:8188"
-$url = Read-Host "ComfyUI URL [$defaultUrl]"
-if ([string]::IsNullOrWhiteSpace($url)) { $url = $defaultUrl }
+$defaultComfyUrl = "http://127.0.0.1:8188"
+$comfyUrl = Read-Host "ComfyUI URL [$defaultComfyUrl]"
+if ([string]::IsNullOrWhiteSpace($comfyUrl)) { $comfyUrl = $defaultComfyUrl }
 
-$parsed = $null
-if (-not [Uri]::TryCreate($url, [UriKind]::Absolute, [ref]$parsed) -or $parsed.Scheme -notin @("http", "https")) {
+$parsedComfy = $null
+if (-not [Uri]::TryCreate($comfyUrl, [UriKind]::Absolute, [ref]$parsedComfy) -or $parsedComfy.Scheme -notin @("http", "https")) {
     throw "ComfyUI URL must be an absolute http:// or https:// address."
+}
+
+$defaultLmUrl = "http://127.0.0.1:1234"
+$lmUrl = Read-Host "LM Studio URL [$defaultLmUrl]"
+if ([string]::IsNullOrWhiteSpace($lmUrl)) { $lmUrl = $defaultLmUrl }
+
+$parsedLm = $null
+if (-not [Uri]::TryCreate($lmUrl, [UriKind]::Absolute, [ref]$parsedLm) -or $parsedLm.Scheme -notin @("http", "https")) {
+    throw "LM Studio URL must be an absolute http:// or https:// address."
 }
 
 $workflowDir = Read-Host "Workflow directory for integration tests [auto-detect]"
@@ -20,7 +29,8 @@ function ConvertTo-DotEnvValue([string]$value) {
 
 $settings = @(
     "# Local-only Comfy Deck settings. This file is ignored by Git."
-    "COMFYUI_URL=$(ConvertTo-DotEnvValue $parsed.AbsoluteUri.TrimEnd('/'))"
+    "COMFYUI_URL=$(ConvertTo-DotEnvValue $parsedComfy.AbsoluteUri.TrimEnd('/'))"
+    "LMSTUDIO_URL=$(ConvertTo-DotEnvValue $parsedLm.AbsoluteUri.TrimEnd('/'))"
 )
 if (-not [string]::IsNullOrWhiteSpace($workflowDir)) {
     $settings += "COMFYUI_WORKFLOW_DIR=$(ConvertTo-DotEnvValue $workflowDir)"
@@ -29,3 +39,4 @@ if (-not [string]::IsNullOrWhiteSpace($workflowDir)) {
 $target = Join-Path $PSScriptRoot "..\.env.local"
 Set-Content -LiteralPath $target -Value $settings -Encoding utf8
 Write-Host "Saved local configuration to .env.local (excluded from Git)."
+

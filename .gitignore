@@ -1,28 +1,21 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# Dependencies
+/node_modules/
+/.pnp/
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/.vinext/
+# Build and Release Outputs
+/dist/
+/dist-release/
+/release/
 /out/
+*.zip
+*.tar.gz
+*.tgz
 
-# misc
-.DS_Store
-*.pem
+# Testing and Coverage
+/coverage/
 
-# debug
+# Logs and Debug
 *.log
 /logs/
 npm-debug.log*
@@ -30,19 +23,33 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Local screenshots and review captures. Intentional app assets belong in /public.
+# Environment and Secrets (Local Only - .env.example is the only public template)
+.env*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS and System Artifacts
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Local Captures and Media (App assets belong in /public)
 /captures/
 /imgs/
 /screenshots/
-
-# Local configuration and secrets. Only the documented template is public.
-.env*
-!.env.example
-
-# vercel
-.vercel
-
-/dist/
-/.wrangler/
 /outputs/
 /work/
+

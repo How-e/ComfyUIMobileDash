@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
 const root = process.cwd();
-const ignored = new Set([".git", "node_modules", "dist", "coverage", "outputs", "work"]);
+const ignored = new Set([".git", "node_modules", "dist", "dist-release", "release", "coverage", "outputs", "work"]);
 const textExtensions = new Set(["", ".bat", ".css", ".html", ".js", ".jsx", ".json", ".md", ".mjs", ".ps1", ".ts", ".tsx", ".yml", ".yaml"]);
 const rules = [
   ["personal home path", /(?:[A-Za-z]:\\Users\\[^\\\s]+|\/(?:Users|home)\/[^/\s]+)/g],

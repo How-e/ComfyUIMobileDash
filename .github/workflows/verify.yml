@@ -23,3 +23,5 @@ jobs:
       - run: npm run privacy:check
       - run: npm test
       - run: npm run build
+      - run: npm run build:release
+

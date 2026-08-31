@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createLocalAiController, stopLocalComfyProcess } from "../server/localAiController.mjs";
 
-function harness({ desktop = false, daemon = false, desktopOnStart = false, presets = [] } = {}) {
+function harness({ desktop = false, daemon = false, desktopOnStart = false, presets = [], comfyOffline = false } = {}) {
   const calls = [];
   let daemonRunning = desktop || daemon;
   let isDaemon = daemon;
@@ -27,11 +27,13 @@ function harness({ desktop = false, daemon = false, desktopOnStart = false, pres
     ]);
     if (command === "ps --json") return JSON.stringify(loaded);
     if (command === "unload --all") { loaded = []; return ""; }
-    if (command.startsWith("load vision-model")) { loaded = [{ modelKey: "vision-model", identifier: "vision-model" }]; return ""; }
+    if (command.startsWith("load vision-model")) { loaded = [{ modelKey: "vision-model", identifier: "vision-model", displayName: "Vision Model" }]; return ""; }
+    if (command.startsWith("load text-model")) { loaded = [{ modelKey: "text-model", identifier: "text-model", displayName: "Text Model" }]; return ""; }
     throw new Error(`Unexpected command: ${command}`);
   };
   const fetch = async (url, options = {}) => {
     calls.push([options.method || "GET", url, options.body]);
+    if (comfyOffline && !url.endsWith("/v1/chat/completions")) throw new TypeError("fetch failed");
     if (url.endsWith("/queue")) return Response.json({ queue_running: [], queue_pending: [] });
     if (url.endsWith("/free")) return new Response(null, { status: 200 });
     if (url.endsWith("/v1/chat/completions")) return Response.json({ choices: [{ message: { content: "A polished local prompt" } }] });
@@ -45,7 +47,9 @@ test("switches from an idle ComfyUI runtime to loopback-only llmster", async () 
   const { controller, calls } = harness();
   const result = await controller.start();
   assert.equal(result.mode, "prompt");
-  assert.deepEqual(result.models.map((model) => model.modelKey), ["vision-model"]);
+  assert.deepEqual(result.models.map((model) => model.modelKey), ["vision-model", "text-model"]);
+  assert.equal(result.models.find((model) => model.modelKey === "vision-model").vision, true);
+  assert.equal(result.models.find((model) => model.modelKey === "text-model").vision, false);
   assert.ok(calls.some((call) => call[0] === "POST" && call[1].endsWith("/free") && call[2].includes('"unload_models":true')));
   assert.ok(calls.some((call) => call.join(" ").includes("server start --port 1234 --bind 127.0.0.1")));
 });
@@ -76,6 +80,40 @@ test("loads one vision model, keeps its catalog visible, generates locally, then
   assert.equal(stopped.mode, "comfy");
   assert.ok(calls.some((call) => call.join(" ") === "lms unload --all"));
   assert.ok(calls.some((call) => call.join(" ") === "lms daemon down"));
+});
+
+test("independent LM mode may start when ComfyUI is intentionally offline", async () => {
+  const { controller } = harness({ comfyOffline: true });
+  const result = await controller.start({ allowComfyOffline: true });
+  assert.equal(result.mode, "prompt");
+});
+
+test("normal handoff still fails closed while ComfyUI is offline", async () => {
+  const { controller } = harness({ comfyOffline: true });
+  await assert.rejects(controller.start(), /could not be verified/);
+});
+
+test("loads a text-only model with bounded runtime settings and chats without an image", async () => {
+  const { controller, calls } = harness({ daemon: true });
+  const loaded = await controller.load("text-model", "", { contextLength: 16384, ttl: 1800 });
+  assert.equal(loaded.loaded[0].modelKey, "text-model");
+  assert.deepEqual(loaded.loadSettings, { contextLength: 16384, ttl: 1800 });
+  assert.ok(calls.some((call) => call.join(" ").includes("load text-model --context-length 16384 --parallel 1 --ttl 1800")));
+  const response = await controller.chat({ prompt: "Explain local inference", temperature: 0.2, maxTokens: 512 });
+  assert.equal(response.content, "A polished local prompt");
+  const body = JSON.parse(calls.findLast((call) => call[1]?.endsWith("/v1/chat/completions"))[2]);
+  assert.equal(body.messages.at(-1).content, "Explain local inference");
+  assert.equal(body.temperature, 0.2);
+  assert.equal(body.max_tokens, 512);
+});
+
+test("unloads an LM model without stopping the headless runtime", async () => {
+  const { controller, calls } = harness({ daemon: true });
+  await controller.load("text-model");
+  const result = await controller.unload();
+  assert.equal(result.mode, "prompt");
+  assert.deepEqual(result.loaded, []);
+  assert.equal(calls.some((call) => call.join(" ") === "lms daemon down"), false);
 });
 
 test("applies a selected LM Studio preset without exposing its system prompt in status", async () => {
@@ -121,6 +159,14 @@ test("frees ComfyUI memory before closing its verified local process", async () 
   assert.ok(freeIndex >= 0 && stopIndex > freeIndex);
 });
 
+test("releases only ComfyUI model memory from its independent control room", async () => {
+  const { controller, calls } = harness();
+  const result = await controller.freeComfyOnly();
+  assert.equal(result.memoryFreed, true);
+  assert.ok(calls.some((call) => call[0] === "POST" && call[1].endsWith("/free")));
+  assert.equal(calls.some((call) => call[0] === "lms" && call[1] === "unload"), false);
+});
+
 test("refuses memory cleanup while ComfyUI has queued work", async () => {
   const busyController = createLocalAiController({
     run: async (args) => args.join(" ") === "daemon status --json" ? JSON.stringify({ status: "not-running" }) : "[]",
@@ -141,4 +187,28 @@ test("passes the configured ComfyUI port to PowerShell through the environment",
   assert.equal(invocation[1].at(-1).includes("$env:COMFY_DASH_PORT"), true);
   assert.equal(invocation[1].includes("8188"), false);
   assert.equal(result.ProcessId, 123);
+});
+
+test("supports configurable LM Studio host and port", async () => {
+  const calls = [];
+  const run = async (args) => {
+    calls.push(args.join(" "));
+    if (args[0] === "daemon" && args[1] === "status") return JSON.stringify({ status: "running", isDaemon: true, pid: 99 });
+    if (args[0] === "server" && args[1] === "status") return JSON.stringify({ running: false });
+    if (args[0] === "server" && args[1] === "start") return "";
+    return "[]";
+  };
+  const fetch = async (url) => {
+    if (url.endsWith("/queue")) return Response.json({ queue_running: [], queue_pending: [] });
+    if (url.endsWith("/free")) return new Response(null, { status: 200 });
+    return new Response("not found", { status: 404 });
+  };
+  const controller = createLocalAiController({
+    lmStudioUrl: "http://127.0.0.1:8080",
+    run,
+    fetch,
+    delay: async () => {},
+  });
+  await controller.start();
+  assert.ok(calls.some((cmd) => cmd.includes("server start --port 8080 --bind 127.0.0.1")));
 });

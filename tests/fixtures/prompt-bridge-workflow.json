@@ -1,0 +1,22 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "bridge-source.png", "upload": "image" },
+    "_meta": { "title": "Reference image" }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "Workflow bridge source prompt", "clip": ["3", 1] },
+    "_meta": { "title": "Positive prompt" }
+  },
+  "3": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "test.safetensors" },
+    "_meta": { "title": "Checkpoint" }
+  },
+  "4": {
+    "class_type": "PreviewImage",
+    "inputs": { "images": ["1", 0] },
+    "_meta": { "title": "Preview" }
+  }
+}

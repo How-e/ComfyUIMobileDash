@@ -30,7 +30,7 @@ function linksFor(graph) {
 
 function nodeMap(graph) { return new Map((graph.nodes || []).map((node) => [String(node.id), node])); }
 
-function specEntries(info) {
+function baseSpecEntries(info) {
   const input = info?.input || {};
   const order = info?.input_order;
   const groups = ["required", "optional"];
@@ -41,53 +41,214 @@ function specEntries(info) {
   });
 }
 
+function normalizeConditionalSpec(entry) {
+  if (!Array.isArray(entry) || typeof entry[0] !== "string") return null;
+  const options = entry[2] && typeof entry[2] === "object" && !Array.isArray(entry[2]) ? entry[2] : {};
+  if (Array.isArray(entry[1])) return [entry[0], [entry[1], options]];
+  if (typeof entry[1] === "string") return [entry[0], [entry[1], options]];
+  return null;
+}
+
+export function workflowInputSpecs(info, values = {}) {
+  const base = baseSpecEntries(info);
+  const dynamic = base.flatMap(([name, spec]) => {
+    const formats = spec?.[1]?.formats;
+    if (!formats || typeof formats !== "object") return [];
+    const selected = values[name] ?? spec?.[1]?.default ?? (Array.isArray(spec?.[0]) ? spec[0][0] : undefined);
+    return (formats[selected] || []).map(normalizeConditionalSpec).filter(Boolean);
+  });
+  const seen = new Set();
+  return [...base, ...dynamic].filter(([name]) => !seen.has(name) && seen.add(name));
+}
+
+export function workflowInputSpec(info, name, values = {}) {
+  return workflowInputSpecs(info, values).find(([key]) => key === name)?.[1];
+}
+
+function defaultForSpec(spec) {
+  const options = spec?.[1] || {};
+  if ("default" in options) return clone(options.default);
+  if (Array.isArray(spec?.[0]) && spec[0].length) return clone(spec[0][0]);
+  if (Array.isArray(options.options) && options.options.length) return clone(options.options[0]);
+  return undefined;
+}
+
+function conditionalNames(spec) {
+  const formats = spec?.[1]?.formats;
+  if (!formats || typeof formats !== "object") return [];
+  return [...new Set(Object.values(formats).flatMap((entries) => (entries || [])
+    .map(normalizeConditionalSpec).filter(Boolean).map(([name]) => name)))];
+}
+
+export function updateWorkflowInput(inputs, info, name, value) {
+  const next = { ...inputs, [name]: value };
+  const controller = baseSpecEntries(info).find(([key]) => key === name)?.[1];
+  const names = conditionalNames(controller);
+  if (!names.length) return next;
+  const previous = { ...inputs };
+  names.forEach((key) => { delete next[key]; });
+  for (const [key, spec] of workflowInputSpecs(info, next)) {
+    if (!names.includes(key)) continue;
+    const old = previous[key];
+    const choices = Array.isArray(spec?.[0]) ? spec[0] : null;
+    if (old !== undefined && (!choices || choices.includes(old))) next[key] = old;
+    else {
+      const fallback = defaultForSpec(spec);
+      if (fallback !== undefined) next[key] = fallback;
+    }
+  }
+  return next;
+}
+
 function isWidgetSpec(spec) {
   const type = spec?.[0];
   return Array.isArray(type) || ["INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"].includes(type);
 }
 
+export function isLoraInputValue(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+    && typeof value.lora === "string"
+    && typeof value.on === "boolean"
+    && typeof value.strength === "number";
+}
+
+export function nextLoraInputName(inputs = {}) {
+  const highest = Object.keys(inputs).reduce((max, name) => {
+    const match = /^lora_(\d+)$/i.exec(name);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `lora_${highest + 1}`;
+}
+
+export function addLoraInput(inputs, lora) {
+  const name = nextLoraInputName(inputs);
+  return { ...inputs, [name]: { on: true, lora, strength: 1, strengthTwo: null } };
+}
+
+export function removeLoraInput(inputs, name) {
+  return Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== name));
+}
+
+function appendDynamicLoraWidgets(values, raw) {
+  let index = 1;
+  for (const value of raw) {
+    if (!isLoraInputValue(value)) continue;
+    while (`lora_${index}` in values) index += 1;
+    values[`lora_${index}`] = clone(value);
+    index += 1;
+  }
+}
+
+const CONTROL_AFTER_GENERATE = new Set(["fixed", "increment", "decrement", "randomize"]);
+
+function controlMode(value) {
+  return typeof value === "string" && CONTROL_AFTER_GENERATE.has(value.toLowerCase()) ? value.toLowerCase() : null;
+}
+
+function flaggedControlNames(info) {
+  return baseSpecEntries(info).filter(([, spec]) => spec?.[1]?.control_after_generate).map(([name]) => name);
+}
+
+function fillMissingWidgetDefaults(values, node, info) {
+  for (const [name, spec] of workflowInputSpecs(info, values)) {
+    if (name in values || !isWidgetSpec(spec)) continue;
+    if ((node.inputs || []).some((input) => input.name === name && input.link != null)) continue;
+    const fallback = defaultForSpec(spec);
+    if (fallback !== undefined) values[name] = fallback;
+  }
+}
+
+function namedControlAfterGenerate(named, info, validNames) {
+  const controlAfterGenerate = {};
+  const flagged = flaggedControlNames(info);
+  for (const name of flagged) {
+    const mode = controlMode(named[`${name}.control_after_generate`]);
+    if (mode) controlAfterGenerate[name] = mode;
+  }
+  if (!validNames.has("control_after_generate")) {
+    const mode = controlMode(named.control_after_generate);
+    if (mode) {
+      const target = flagged.find((name) => !(name in controlAfterGenerate));
+      if (target) controlAfterGenerate[target] = mode;
+    }
+  }
+  return controlAfterGenerate;
+}
+
 function widgetValues(node, info) {
-  const validNames = new Set(specEntries(info).map(([name]) => name));
   const named = node.widgets_values_named && typeof node.widgets_values_named === "object"
     ? node.widgets_values_named
     : node.widgets_values && typeof node.widgets_values === "object" && !Array.isArray(node.widgets_values)
       ? node.widgets_values
       : null;
   if (named) {
-    const values = Object.fromEntries(Object.entries(named).filter(([name]) => validNames.has(name)));
-    for (const [name, spec] of specEntries(info)) {
-      if (name in values || !isWidgetSpec(spec)) continue;
-      if ((node.inputs || []).some((input) => input.name === name && input.link != null)) continue;
-      const options = spec?.[1] || {};
-      if ("default" in options) values[name] = clone(options.default);
-      else if (Array.isArray(spec?.[0]) && spec[0].length) values[name] = clone(spec[0][0]);
-      else if (Array.isArray(options.options) && options.options.length) values[name] = clone(options.options[0]);
-    }
-    return values;
+    const validNames = new Set(workflowInputSpecs(info, named).map(([name]) => name));
+    const values = Object.fromEntries(Object.entries(named)
+      .filter(([name, value]) => validNames.has(name) || (/^lora_\d+$/i.test(name) && isLoraInputValue(value)))
+      .map(([name, value]) => [name, clone(value)]));
+    fillMissingWidgetDefaults(values, node, info);
+    return { values, controlAfterGenerate: namedControlAfterGenerate(named, info, validNames) };
   }
 
   const raw = node.widgets_values === undefined || node.widgets_values === null
     ? []
     : Array.isArray(node.widgets_values) ? node.widgets_values : [node.widgets_values];
   const values = {};
+  const controlAfterGenerate = {};
   let cursor = 0;
-  for (const [name, spec] of specEntries(info)) {
+  for (const [name, spec] of baseSpecEntries(info)) {
     if (!isWidgetSpec(spec)) continue;
     const socket = (node.inputs || []).find((input) => input.name === name);
     if (socket && !socket.widget && socket.link != null) continue;
     if (cursor < raw.length) values[name] = clone(raw[cursor]);
     cursor += 1;
-    if (spec?.[1]?.control_after_generate && cursor < raw.length) cursor += 1;
+    if (spec?.[1]?.control_after_generate && cursor < raw.length) {
+      const mode = controlMode(raw[cursor]);
+      if (mode) {
+        controlAfterGenerate[name] = mode;
+        cursor += 1;
+      }
+    }
+    const formats = spec?.[1]?.formats;
+    if (formats && name in values) {
+      for (const [dynamicName, dynamicSpec] of (formats[values[name]] || []).map(normalizeConditionalSpec).filter(Boolean)) {
+        if (cursor < raw.length) values[dynamicName] = clone(raw[cursor]);
+        cursor += 1;
+        if (dynamicSpec?.[1]?.control_after_generate && cursor < raw.length) cursor += 1;
+      }
+    }
   }
-  for (const [name, spec] of specEntries(info)) {
-    if (name in values || !isWidgetSpec(spec)) continue;
-    if ((node.inputs || []).some((input) => input.name === name && input.link != null)) continue;
-    const options = spec?.[1] || {};
-    if ("default" in options) values[name] = clone(options.default);
-    else if (Array.isArray(spec?.[0]) && spec[0].length) values[name] = clone(spec[0][0]);
-    else if (Array.isArray(options.options) && options.options.length) values[name] = clone(options.options[0]);
+  // rgthree's Power Lora Loader exposes a flexible **kwargs API, so its LoRA
+  // widgets are intentionally absent from object_info. ComfyUI serializes each
+  // configured row as an object in widgets_values; restore the lora_N input
+  // names expected by the server instead of silently discarding every row.
+  appendDynamicLoraWidgets(values, raw);
+  fillMissingWidgetDefaults(values, node, info);
+  return { values, controlAfterGenerate };
+}
+
+function nextSeedValue(value, mode) {
+  if (mode === "fixed") return value;
+  if (mode === "increment") return Math.max(0, value + 1);
+  if (mode === "decrement") return Math.max(0, value - 1);
+  if (mode === "randomize") return Math.floor(Math.random() * 1e15);
+  return value;
+}
+
+export function applyControlAfterGenerate(workflow) {
+  const next = clone(workflow);
+  for (const node of Object.values(next)) {
+    const modes = node?._meta?.controlAfterGenerate;
+    if (!modes || typeof modes !== "object" || !node.inputs) continue;
+    for (const [name, mode] of Object.entries(modes)) {
+      const current = node.inputs[name];
+      if (typeof current !== "number" || !Number.isFinite(current)) continue;
+      const resolved = controlMode(mode);
+      if (!resolved) continue;
+      node.inputs[name] = nextSeedValue(current, resolved);
+    }
   }
-  return values;
+  return next;
 }
 
 function bypassInput(node, outputSlot) {
@@ -188,7 +349,7 @@ export function convertCanvasWorkflow(workflow, objectInfo) {
       }
       const info = objectInfo[node.type];
       if (!info) continue;
-      const inputs = widgetValues(node, info);
+      const { values: inputs, controlAfterGenerate } = widgetValues(node, info);
       const inputLabels = {};
       for (const socket of node.inputs || []) {
         if (socket.link == null) continue;
@@ -205,6 +366,7 @@ export function convertCanvasWorkflow(workflow, objectInfo) {
         _meta: {
           title: node.title || info.display_name || node.type,
           ...(Object.keys(inputLabels).length ? { inputLabels } : {}),
+          ...(Object.keys(controlAfterGenerate).length ? { controlAfterGenerate } : {}),
         },
       };
     }
