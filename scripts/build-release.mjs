@@ -54,8 +54,12 @@ for (const [src, dest] of filesToCopy) {
       await cp(srcPath, destPath);
     }
   } catch (err) {
-    if (src === "LICENSE") {
-      console.warn("  (Notice: LICENSE file will be included once created)");
+    if (err.code === "ENOENT" && (src === "public" || src === "LICENSE")) {
+      if (src === "public") {
+        await mkdir(destPath, { recursive: true });
+      } else {
+        console.warn(`  (Notice: ${src} not present, skipping)`);
+      }
     } else {
       throw err;
     }
