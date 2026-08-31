@@ -55,7 +55,8 @@ export function workflowInputSpecs(info, values = {}) {
     const formats = spec?.[1]?.formats;
     if (!formats || typeof formats !== "object") return [];
     const selected = values[name] ?? spec?.[1]?.default ?? (Array.isArray(spec?.[0]) ? spec[0][0] : undefined);
-    return (formats[selected] || []).map(normalizeConditionalSpec).filter(Boolean);
+    const entries = formats[selected];
+    return Array.isArray(entries) ? entries.map(normalizeConditionalSpec).filter(Boolean) : [];
   });
   const seen = new Set();
   return [...base, ...dynamic].filter(([name]) => !seen.has(name) && seen.add(name));
@@ -76,8 +77,9 @@ function defaultForSpec(spec) {
 function conditionalNames(spec) {
   const formats = spec?.[1]?.formats;
   if (!formats || typeof formats !== "object") return [];
-  return [...new Set(Object.values(formats).flatMap((entries) => (entries || [])
-    .map(normalizeConditionalSpec).filter(Boolean).map(([name]) => name)))];
+  return [...new Set(Object.values(formats).flatMap((entries) => Array.isArray(entries)
+    ? entries.map(normalizeConditionalSpec).filter(Boolean).map(([name]) => name)
+    : []))];
 }
 
 export function updateWorkflowInput(inputs, info, name, value) {
@@ -100,7 +102,7 @@ export function updateWorkflowInput(inputs, info, name, value) {
   return next;
 }
 
-function isWidgetSpec(spec) {
+export function isWidgetSpec(spec) {
   const type = spec?.[0];
   return Array.isArray(type) || ["INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"].includes(type);
 }
@@ -110,6 +112,26 @@ export function isLoraInputValue(value) {
     && typeof value.lora === "string"
     && typeof value.on === "boolean"
     && typeof value.strength === "number";
+}
+
+export function isWorkflowLink(value) {
+  return Array.isArray(value) && value.length === 2
+    && ["string", "number"].includes(typeof value[0])
+    && Number.isInteger(value[1]);
+}
+
+export function containsWorkflowLink(value) {
+  if (isWorkflowLink(value)) return true;
+  if (Array.isArray(value)) return value.some(containsWorkflowLink);
+  if (value && typeof value === "object") return Object.values(value).some(containsWorkflowLink);
+  return false;
+}
+
+export function isEditableWorkflowValue(value, spec) {
+  if (["string", "number", "boolean"].includes(typeof value)) return true;
+  if (isLoraInputValue(value)) return true;
+  if (isWidgetSpec(spec) && value !== null && typeof value === "object") return true;
+  return value !== null && typeof value === "object" && !containsWorkflowLink(value);
 }
 
 export function nextLoraInputName(inputs = {}) {

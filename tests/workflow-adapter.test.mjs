@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { loadEnv } from "vite";
-import { addLoraInput, normalizeWorkflow, convertCanvasWorkflow, workflowClassTypes, applyControlAfterGenerate, isLoraInputValue, nextLoraInputName, removeLoraInput, updateWorkflowInput, workflowInputSpec } from "../src/workflowAdapter.js";
+import { addLoraInput, normalizeWorkflow, convertCanvasWorkflow, workflowClassTypes, applyControlAfterGenerate, containsWorkflowLink, isEditableWorkflowValue, isLoraInputValue, nextLoraInputName, removeLoraInput, updateWorkflowInput, workflowInputSpec } from "../src/workflowAdapter.js";
 import { sampleWorkflow } from "../src/sampleWorkflow.js";
 
 const localEnv = loadEnv("development", process.cwd(), "");
@@ -13,6 +13,7 @@ const candidates = [
   localEnv.COMFYUI_WORKFLOW_DIR || process.env.COMFYUI_WORKFLOW_DIR,
   resolve(process.cwd(), "..", "user", "default", "workflows"),
   resolve(process.cwd(), "..", "ComfyUI", "user", "default", "workflows"),
+  resolve(process.cwd(), "..", "ComfyUI_windows_portable", "ComfyUI", "user", "default", "workflows"),
   resolve(process.cwd(), "..", "..", "ComfyUI", "user", "default", "workflows"),
 ].filter(Boolean);
 
@@ -44,9 +45,19 @@ test("API workflows preserve every node, linked input, scalar, object, and metad
   assert.equal(source.prompt["2"].inputs.seed, 7);
 });
 
-test("converts named widget objects and fills newly added required defaults", () => {
+test("exposes structured custom-node settings while protecting linked values", () => {
+  assert.equal(isEditableWorkflowValue({ mode: "tiles", overlap: 16 }), true);
+  assert.equal(isEditableWorkflowValue([0.1, 0.5, 1]), true);
+  assert.equal(isEditableWorkflowValue(["12", 0]), false);
+  assert.equal(isEditableWorkflowValue([12, 0]), false);
+  assert.equal(isEditableWorkflowValue(["literal", 0], [["literal", 0], {}]), true);
+  assert.equal(isEditableWorkflowValue({ source: ["12", 0], weight: 0.5 }), false);
+  assert.equal(containsWorkflowLink({ nested: [["12", 0]] }), true);
+});
+
+test("converts named widget objects, including structured custom settings, and fills newly added required defaults", () => {
   const workflow = {
-    nodes: [{ id: 1, type: "OutputNode", mode: 0, inputs: [], widgets_values: { title: "saved", preview: { ignored: true } } }],
+    nodes: [{ id: 1, type: "OutputNode", mode: 0, inputs: [], widgets_values: { title: "saved", advanced: { tiled: true, schedule: [0.1, 0.5] }, preview: { ignored: true } } }],
     links: [],
   };
   const info = {
@@ -54,12 +65,13 @@ test("converts named widget objects and fills newly added required defaults", ()
       output_node: true,
       input: { required: {
         title: ["STRING", { default: "default" }],
+        advanced: ["STRING", { default: {} }],
         new_option: ["INT", { default: 3 }],
       } },
-      input_order: { required: ["title", "new_option"] },
+      input_order: { required: ["title", "advanced", "new_option"] },
     },
   };
-  assert.deepEqual(convertCanvasWorkflow(workflow, info)["1"].inputs, { title: "saved", new_option: 3 });
+  assert.deepEqual(convertCanvasWorkflow(workflow, info)["1"].inputs, { title: "saved", advanced: { tiled: true, schedule: [0.1, 0.5] }, new_option: 3 });
 });
 
 test("restores every dynamic rgthree Power Lora row as an editable API input", () => {
@@ -178,6 +190,12 @@ test("switching a conditional format replaces obsolete controls with valid optio
   assert.deepEqual(next, {
     format: "video/nvenc_h264-mp4", pix_fmt: "yuv420p", bitrate: 10, megabit: true, save_metadata: false,
   });
+});
+
+test("ignores non-conditional custom-node formats metadata", () => {
+  const info = { input: { required: { format: [["png"], { formats: { png: { extension: ".png" } } }] } } };
+  assert.deepEqual(workflowInputSpec(info, "format", { format: "png" }), [["png"], { formats: { png: { extension: ".png" } } }]);
+  assert.deepEqual(updateWorkflowInput({ format: "png" }, info, "format", "png"), { format: "png" });
 });
 
 const ksamplerInfo = {
@@ -342,5 +360,18 @@ test("converts every saved Qwen and MiniMax workflow with complete server inputs
       .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value) && !isLoraInputValue(value))
       .map(([key]) => `${id}:${node.class_type}.${key}`));
     assert.deepEqual(unsupported, [], `${name} should not expose unsupported object-valued generation controls`);
+  }
+});
+
+test("converts every saved workflow with complete required custom-node inputs", async (t) => {
+  if (!await integrationReady(t)) return;
+  const names = (await readdir(workflowRoot)).filter((name) => !name.startsWith(".") && name.endsWith(".json"));
+  assert.ok(names.length, "at least one installed workflow should be present");
+  for (const name of names) {
+    const workflow = await load(name);
+    const objectInfo = await getObjectInfo(workflow);
+    const prompt = convertCanvasWorkflow(workflow, objectInfo);
+    assert.ok(Object.keys(prompt).length, `${name} should contain runnable nodes`);
+    assert.deepEqual(missingRequired(prompt, objectInfo), [], `${name} should preserve every required server input`);
   }
 });

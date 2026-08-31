@@ -9,7 +9,7 @@ import { CREATE_SESSION_KEY, parseCreateSession, writeCreateSession } from "./cr
 import { formatImageDimensions } from "./imageDimensions";
 import { parseKjPreview, parsePreviewFrame } from "./livePreview";
 import { activeQueueState, getPersistentClientId } from "./queueRecovery";
-import { addLoraInput, applyControlAfterGenerate, isLoraInputValue, normalizeWorkflow, priorityForNode, removeLoraInput, updateWorkflowInput, workflowClassTypes, workflowInputSpec } from "./workflowAdapter";
+import { addLoraInput, applyControlAfterGenerate, isEditableWorkflowValue, isLoraInputValue, normalizeWorkflow, priorityForNode, removeLoraInput, updateWorkflowInput, workflowClassTypes, workflowInputSpec } from "./workflowAdapter";
 import { comfyImageViewPath, promptBridgeTargets } from "./promptBridge";
 import { encodeUserdataPath } from "./userdataPath";
 import { LMStudioPanel } from "./LMStudioPanel";
@@ -24,7 +24,7 @@ const THEMES = [
 
 const makeClientId = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const editable = (value) => ["string", "number", "boolean"].includes(typeof value) || isLoraInputValue(value);
+const editable = (node, name, value, info) => isEditableWorkflowValue(value, inputSpec(info, name, node.inputs));
 const STORAGE = { activePrompt: "comfydeck.activePrompt", runs: "comfydeck.recentRuns", createSession: CREATE_SESSION_KEY, theme: "comfydeck.theme" };
 const LIGHTWEIGHT = {
   maxSavedRuns: 16,
@@ -357,8 +357,8 @@ export default function App() {
   const nodes = useMemo(() => Object.entries(workflow).map(([id, node]) => ({ id, ...node })).sort((a, b) => priorityForNode(a) - priorityForNode(b)), [workflow]);
   const visibleNodes = useMemo(() => nodes.filter((node) => {
     const haystack = `${nodeTitle(node)} ${node.class_type} ${Object.keys(node.inputs).join(" ")} ${Object.values(node._meta?.inputLabels || {}).join(" ")}`.toLowerCase();
-    return haystack.includes(search.toLowerCase()) && (Object.values(node.inputs).some(editable) || isPowerLoraNode(node)) && (!essentialsOnly || priorityForNode(node) <= 4);
-  }), [nodes, search, essentialsOnly]);
+    return haystack.includes(search.toLowerCase()) && (Object.entries(node.inputs).some(([name, value]) => editable(node, name, value, objectInfo[node.class_type])) || isPowerLoraNode(node)) && (!essentialsOnly || priorityForNode(node) <= 4);
+  }), [nodes, search, essentialsOnly, objectInfo]);
   const loraOptions = useMemo(() => {
     const spec = inputSpec(objectInfo.LoraLoaderModelOnly, "lora_name");
     return Array.isArray(spec?.[0]) ? spec[0] : [];
@@ -468,7 +468,7 @@ export default function App() {
     setBase(next); localStorage.setItem("comfydeck.base", next); setConnectionOpen(false);
   }
 
-  const editableCount = nodes.reduce((sum, node) => sum + Object.values(node.inputs).filter(editable).length, 0);
+  const editableCount = nodes.reduce((sum, node) => sum + Object.entries(node.inputs).filter(([name, value]) => editable(node, name, value, objectInfo[node.class_type])).length, 0);
   const progressPercent = progress ? Math.round((progress.value / progress.max) * 100) : null;
   const bridgeTargets = useMemo(() => promptBridgeTargets(workflow), [workflow]);
   const promptTargets = bridgeTargets.prompts;
@@ -601,7 +601,7 @@ export default function App() {
 }
 
 function NodeCard({ node, active, updateInput, updateMeta, addLora, removeLora, loraOptions, setFocusEditor, info, uploadImage, base }) {
-  const fields = Object.entries(node.inputs).filter(([,value])=>editable(value));
+  const fields = Object.entries(node.inputs).filter(([name,value])=>editable(node, name, value, info));
   const [newLora, setNewLora] = useState("");
   const powerLora = isPowerLoraNode(node);
   const addSelected = () => { if (newLora) { addLora(node.id, newLora); setNewLora(""); } };
@@ -632,7 +632,24 @@ function Field({ node, nodeId, name, label: promotedLabel, value, updateInput, u
     const missing = !options.some((option) => Object.is(option, value));
     return <label className="text-field"><span>{label}</span><select value={value} onChange={(e)=>updateInput(nodeId,name,options.find((option)=>String(option)===e.target.value) ?? e.target.value)}>{missing&&<option value={value}>{String(value)} (unavailable)</option>}{options.map((option)=><option key={String(option)} value={option}>{option}</option>)}</select></label>;
   }
+  if (value !== null && typeof value === "object") return <StructuredField nodeId={nodeId} name={name} label={label} value={value} updateInput={updateInput}/>;
   return <label className="text-field"><span>{label}</span><input value={value} onInput={(e)=>updateInput(nodeId,name,e.target.value)}/></label>;
+}
+
+function StructuredField({ nodeId, name, label, value, updateInput }) {
+  const serialized = JSON.stringify(value, null, 2);
+  const [draft, setDraft] = useState(serialized);
+  const [error, setError] = useState("");
+  useEffect(() => { setDraft(serialized); setError(""); }, [serialized]);
+  const commit = () => {
+    try {
+      const parsed = JSON.parse(draft);
+      if (parsed === null || typeof parsed !== "object") throw new Error("Use a JSON object or array.");
+      updateInput(nodeId, name, parsed);
+      setError("");
+    } catch (nextError) { setError(nextError.message); }
+  };
+  return <label className={`structured-field${error ? " invalid" : ""}`}><span>{label}</span><textarea rows={Math.min(10, Math.max(4, draft.split("\n").length))} value={draft} onInput={(e)=>setDraft(e.target.value)} onBlur={commit} spellCheck="false" autoCapitalize="none" autoCorrect="off"/><small>{error || "JSON setting — linked node references remain protected."}</small></label>;
 }
 
 function LoraField({ nodeId, name, label, value, updateInput, removeLora }) {

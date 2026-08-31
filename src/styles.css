@@ -580,8 +580,8 @@ svg { display: block; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px 14px;
 }
-.prompt-field, .image-field, .seed-field, .lora-field { grid-column: 1 / -1; }
-.prompt-field > span, .number-field > span, .text-field > span, .toggle-field > span,
+.prompt-field, .image-field, .seed-field, .lora-field, .structured-field { grid-column: 1 / -1; }
+.prompt-field > span, .number-field > span, .text-field > span, .toggle-field > span, .structured-field > span,
 .image-field > span, .studio-field > span, .connection-sheet label > span, .theme-option > span {
   display: block;
   margin-bottom: 7px;
@@ -591,7 +591,7 @@ svg { display: block; }
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.prompt-field textarea, .text-field input, .text-field select, .seed-field .seed-mode,
+.prompt-field textarea, .structured-field textarea, .text-field input, .text-field select, .seed-field .seed-mode,
 .studio-field select, .studio-field textarea, .output-card > textarea, .connection-sheet label > input {
   width: 100%;
   border: 1px solid var(--line);
@@ -606,6 +606,17 @@ svg { display: block; }
   line-height: 1.55;
   font-family: inherit;
 }
+
+.structured-field textarea {
+  width: 100%;
+  min-height: 108px;
+  padding: 12px;
+  resize: vertical;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.structured-field small { display: block; margin-top: 6px; color: var(--muted); }
+.structured-field.invalid textarea { border-color: var(--danger); }
+.structured-field.invalid small { color: var(--danger); }
 .prompt-tools {
   min-height: 38px;
   display: flex;
