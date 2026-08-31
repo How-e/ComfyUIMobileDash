@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   Activity, Bot, Check, ChevronDown, CircleStop, Clipboard, Cpu, FileJson, FolderOpen, GalleryHorizontalEnd, Image as ImageIcon,
-  HardDriveDownload, ListFilter, LoaderCircle, Maximize2, MemoryStick, Minus, Play, Plus, Power, RefreshCw, Search,
+  HardDriveDownload, ListFilter, LoaderCircle, Maximize2, MemoryStick, Minus, Palette, Play, Plus, Power, RefreshCw, Search,
   SlidersHorizontal, Sparkles, Trash2, Upload, Wifi, WifiOff, X,
 } from "lucide-preact";
 import { collectMedia, galleryGenerations } from "./galleryMedia";
@@ -14,10 +14,18 @@ import { comfyImageViewPath, promptBridgeTargets } from "./promptBridge";
 import { encodeUserdataPath } from "./userdataPath";
 import { LMStudioPanel } from "./LMStudioPanel";
 
+const THEMES = [
+  { id: "obsidian", name: "Obsidian Slate", desc: "Default dark mode with coral blaze & emerald status", bg: "#0c1210", surface: "#131d1a", accent: "#ff644f" },
+  { id: "midnight", name: "Midnight Cyber", desc: "Deep space navy with electric sky cyan & indigo", bg: "#070b14", surface: "#0f172a", accent: "#38bdf8" },
+  { id: "emerald", name: "Emerald Matrix", desc: "Deep dark forest with vibrant mint emerald", bg: "#05100c", surface: "#0a1c15", accent: "#10b981" },
+  { id: "amethyst", name: "Amethyst Synth", desc: "Obsidian violet with glowing synthwave purple", bg: "#0b0713", surface: "#140e21", accent: "#a855f7" },
+  { id: "light", name: "Studio Minimal", desc: "Clean daylight studio with vivid coral accents", bg: "#f0f4f2", surface: "#ffffff", accent: "#ff5742" },
+];
+
 const makeClientId = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const editable = (value) => ["string", "number", "boolean"].includes(typeof value) || isLoraInputValue(value);
-const STORAGE = { activePrompt: "comfydeck.activePrompt", runs: "comfydeck.recentRuns", createSession: CREATE_SESSION_KEY };
+const STORAGE = { activePrompt: "comfydeck.activePrompt", runs: "comfydeck.recentRuns", createSession: CREATE_SESSION_KEY, theme: "comfydeck.theme" };
 const LIGHTWEIGHT = {
   maxSavedRuns: 16,
   maxGalleryGenerations: 5,
@@ -130,6 +138,14 @@ export default function App() {
   const [notice, setNotice] = useState(createBoot.restored ? `${createBoot.workflowName} restored.` : "Demo workflow loaded — open your API JSON when ready.");
   const [focusEditor, setFocusEditor] = useState(null);
   const [aiStatus, setAiStatus] = useState({ mode: "unknown", loaded: [], models: [] });
+  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE.theme) || "obsidian");
+  const [themeOpen, setThemeOpen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(STORAGE.theme, theme);
+  }, [theme]);
+
   const fileRef = useRef(null);
   const clientId = useRef(getPersistentClientId(sessionStorage, makeClientId));
   const activePromptRef = useRef(activePromptId);
@@ -535,6 +551,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><div className="brand-mark"><i/><i/><i/></div><div><span className="brand-name">COMFY</span><span className="brand-product">DECK</span></div></div>
         <div className="topbar-actions">
+          <button className="topbar-icon-button" aria-label="Choose color theme" title="Color theme presets" onClick={() => setThemeOpen(true)}><Palette size={19}/></button>
           <button className="memory-control-button" aria-label="Open memory and runtime controls" title="Memory and runtime controls" onClick={() => setMemoryOpen(true)}><MemoryStick/></button>
           <button className={`connection-pill ${connected ? "online" : ""}`} onClick={() => setConnectionOpen(true)}>
             {connected ? <Wifi size={15}/> : <WifiOff size={15}/>}<span><strong>{connected ? "CONNECTED" : "OFFLINE"}</strong><small>{base === "/comfy" ? "LOCAL PROXY · 8188" : base.replace(/^https?:\/\//, "")}</small></span><ChevronDown size={15}/>
@@ -578,6 +595,7 @@ export default function App() {
       {memoryOpen && <div className="modal-backdrop" onClick={()=>!memoryWorking&&setMemoryOpen(false)}><section className="connection-sheet memory-sheet" role="dialog" aria-modal="true" aria-labelledby="memory-title" onClick={(e)=>e.stopPropagation()}><div className="sheet-handle"/><div className="sheet-title"><div><span className="overline">LOCAL RUNTIMES</span><h2 id="memory-title">Memory & shutdown</h2></div><button aria-label="Close memory controls" disabled={!!memoryWorking} onClick={()=>setMemoryOpen(false)}><X/></button></div><p className="memory-message">{memoryMessage}</p><div className="runtime-actions"><button disabled={!!memoryWorking} onClick={()=>runMemoryAction("free", "free-memory")}><span className="runtime-action-icon"><HardDriveDownload/></span><span><strong>Free RAM / VRAM</strong><small>Unload models from ComfyUI and LM Studio without loading another model.</small></span>{memoryWorking==="free"&&<LoaderCircle className="spin"/>}</button><button disabled={!!memoryWorking} onClick={()=>runMemoryAction("close-lm", "stop")}><span className="runtime-action-icon"><Power/></span><span><strong>Close LM runtime</strong><small>Unload LM models, stop its local server, and close the headless daemon.</small></span>{memoryWorking==="close-lm"&&<LoaderCircle className="spin"/>}</button><button className="danger" disabled={!!memoryWorking || !connected} onClick={()=>runMemoryAction("close-comfy", "close-comfy")}><span className="runtime-action-icon"><CircleStop/></span><span><strong>Close ComfyUI</strong><small>Free its models, then close the verified local ComfyUI process.</small></span>{memoryWorking==="close-comfy"&&<LoaderCircle className="spin"/>}</button></div></section></div>}
       {libraryOpen && <WorkflowLibrary items={savedWorkflows} search={librarySearch} setSearch={setLibrarySearch} openWorkflow={openSavedWorkflow} close={()=>setLibraryOpen(false)} importFile={()=>fileRef.current?.click()} connected={connected}/>} 
       {focusEditor && <FocusEditor editor={focusEditor} value={workflow[focusEditor.nodeId].inputs[focusEditor.key]} onChange={(value)=>updateInput(focusEditor.nodeId,focusEditor.key,value)} close={()=>setFocusEditor(null)}/>} 
+      {themeOpen && <ThemeSheet currentTheme={theme} onSelectTheme={(t)=>setTheme(t)} close={()=>setThemeOpen(false)}/>}
     </main>
   );
 }
@@ -862,4 +880,45 @@ function QueuePanel({ busy, queueRemaining, progressPercent, activeNode, livePre
 function Gallery({ runs, base, rerun, clearHistory }) {
   const generations = galleryGenerations(runs, base, LIGHTWEIGHT.maxGalleryGenerations);
   return <section className="panel-page"><div className="panel-kicker"><ImageIcon/><span>RECENT OUTPUTS</span></div><h1>{generations.length ? (generations.length === 1 ? "Latest generation" : `Last ${generations.length} generations`) : "Nothing here yet"}</h1><p>{generations.length ? "Tap an image or video to open it. Past runs store settings and output references only—never image or video files." : "Completed dashboard runs will appear here."}</p>{generations.length ? generations.map((generation) => <div className="gallery-generation" key={generation.promptId}><div className="gallery-generation-head"><strong>{generation.workflowName}</strong><small>{new Date(generation.timestamp).toLocaleString()}</small></div><div className="gallery-grid">{generation.media.map((item, index) => <a href={item.url} target="_blank" rel="noreferrer" key={`${generation.promptId}-${item.filename}-${index}`}>{item.kind === "video" ? <video controls playsInline preload="metadata" src={item.url} onClick={(event) => event.preventDefault()}/> : <img loading="lazy" decoding="async" src={item.url} alt={`ComfyUI output ${index + 1}`}/>}<span>{item.filename}</span></a>)}</div></div>) : <div className="gallery-empty"><ImageIcon/><span>Queue your first workflow</span></div>}<div className="run-history"><div className="history-heading"><div><span className="overline">LOCAL RUN HISTORY</span><h2>Reuse a previous run</h2></div>{runs.length>0&&<button onClick={clearHistory}>Clear history</button>}</div>{runs.map((run)=><article className="run-row" key={run.promptId}><div><strong>{run.workflowName}</strong><small>{new Date(run.completedAt || run.stoppedAt || run.queuedAt).toLocaleString()} · {String(run.promptId).slice(0,8)}</small></div><button onClick={()=>rerun(run)} disabled={!run.workflow}>Queue first</button></article>)}{!runs.length&&<div className="queue-empty">Settings from future dashboard runs will be saved on this device.</div>}</div></section>;
+}
+
+function ThemeSheet({ currentTheme, onSelectTheme, close }) {
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <section className="theme-sheet" role="dialog" aria-modal="true" aria-labelledby="theme-title" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="sheet-title">
+          <div>
+            <span className="overline">COLOR PRESETS</span>
+            <h2 id="theme-title">Theme presets</h2>
+          </div>
+          <button aria-label="Close theme settings" onClick={close}><X/></button>
+        </div>
+        <p>Switch between modern dark modes and clean studio presets. Your selection is preserved locally.</p>
+        <div className="theme-grid">
+          {THEMES.map((item) => (
+            <button
+              key={item.id}
+              className={`theme-option ${currentTheme === item.id ? "active" : ""}`}
+              onClick={() => onSelectTheme(item.id)}
+            >
+              <div className="theme-swatch" style={{ background: item.bg }}>
+                <span style={{ background: item.surface }} />
+                <span style={{ background: item.accent }} />
+              </div>
+              <div>
+                <strong>{item.name}</strong>
+                <small>{item.desc}</small>
+              </div>
+              {currentTheme === item.id && (
+                <div className="theme-check">
+                  <Check size={14} />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }
