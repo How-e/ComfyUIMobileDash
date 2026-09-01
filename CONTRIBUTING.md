@@ -61,7 +61,7 @@ npm run build:release
 ## Architectural Principles
 
 1. **Lightweight & Fast**: Minimize third-party dependencies. Keep resource footprint low so GPU/CPU power stays available for image/video generation.
-2. **Touch-First Mobile UX**: Ensure all new UI components are responsive, touch-friendly, and accessible on mobile and tablet viewports.
+2. **Touch-First Mobile UX**: Ensure all new UI components are responsive and keyboard-accessible, keep interactive targets at least 44 × 44 CSS pixels, preserve visible focus, and verify both 320 px and 390 px phone widths without horizontal overflow.
 3. **Loopback & LAN Security**: Comfy Deck is designed for private local networks. Do not introduce features that require cloud telemetry or unauthenticated remote access.
 4. **Non-Destructive Workflows**: Preserving intact workflow inputs, links, and node metadata is critical.
 

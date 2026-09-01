@@ -9,6 +9,7 @@ test("theme engine defines obsidian default and all 5 color presets", () => {
   assert.match(styles, /\[data-theme="midnight"\]/, "midnight theme preset defined");
   assert.match(styles, /\[data-theme="emerald"\]/, "emerald theme preset defined");
   assert.match(styles, /\[data-theme="amethyst"\]/, "amethyst theme preset defined");
+  assert.match(styles, /\[data-theme="cyberpunk"\]/, "cyberpunk theme preset defined");
   assert.match(styles, /\[data-theme="light"\]/, "light theme preset defined");
 });
 

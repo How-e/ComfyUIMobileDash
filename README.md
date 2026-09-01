@@ -12,6 +12,7 @@ Comfy Deck is model- and node-agnostic. It discovers the input schema for every 
 2. Double-click `start-dashboard.bat` (or run `npm install`, then `npm run dev`).
 3. Open the LAN URL printed by Vite on your mobile device.
 4. Tap **Workflows** in Comfy Deck and choose any workflow saved in ComfyUI.
+5. Follow Create's five essentials: **Image**, **Prompt**, **Duration & settings**, **Model**, then **Run**. Open **Advanced** only when you need every editable workflow value.
 
 The dashboard automatically uses ComfyUI at `127.0.0.1:8188`, so the common portable installation needs no path configuration or CORS flag. If ComfyUI uses another address, run `configure-dashboard.bat`; the chosen values are saved only in the ignored `.env.local` file. You can also copy `.env.example` manually or set `COMFYUI_URL` in the shell.
 
@@ -39,17 +40,17 @@ The application does not need a filesystem path to ComfyUI during normal use; it
 ## Current capabilities
 
 - Three purpose-built workspaces: **Flow** for the safe ComfyUI ↔ LM Studio handoff, **ComfyUI** for workflow operations only, and **LM Studio** for independent local model work.
-- A ComfyUI control room with on-demand device, RAM, VRAM, queue, and workflow snapshots; direct Create, Queue, and Gallery views; and ComfyUI-only model unload/shutdown controls.
+- A ComfyUI control room that leads with Create and Queue actions, with device, RAM, VRAM, and queue telemetry available in an on-demand Resources disclosure.
 - An independent LM Studio workspace for installed text and vision models, local presets, bounded context and idle-unload settings, session-only chat, optional image input, model-only unload, and full headless-runtime shutdown.
 - Lists workflows directly from ComfyUI's saved workflow library.
 - Converts both canvas workflows and API-format workflows into runnable touch controls.
 - Expands modern ComfyUI subgraphs and exposes their promoted controls generically.
 - Uses each installed node's live ComfyUI schema to transfer editable variables, inputs, and settings into the dashboard, including structured custom-node settings.
 - Protects linked node inputs from accidental edits.
-- Prioritizes image inputs, prompts, LoRAs, duration, and sampling controls.
+- Organizes mobile Create into a durable five-step essentials flow: image, prompt, duration/settings, model, and run. **Advanced** preserves every schema-discovered editable control without exposing linked graph inputs.
 - Sampler seeds support ComfyUI control-after-generate (fixed / increment / decrement / randomize) in the Create tab.
 - Uploads replacement input images directly to ComfyUI.
-- Full-screen, keyboard-safe prompt editor.
+- Full-screen, keyboard-safe prompt editor plus focus-trapped sheets, Escape-to-close behavior, named numeric controls, semantic progress, and 44px minimum touch targets.
 - Live WebSocket status, progress, queue count, interrupt, and output gallery.
 - Drag-and-drop or file-picker workflow import.
 - Local connection preference storage only; no cloud or hosted services.
@@ -69,7 +70,7 @@ The handoff is strict:
 
 ## Independent workspaces
 
-The **ComfyUI** workspace never starts or loads LM Studio. Its Overview snapshot is fetched only when opened or manually refreshed, and its **Unload models** action calls ComfyUI's native memory-release endpoint without touching LM Studio. Create, Queue, and Gallery retain the existing workflow editor, live preview, recovery, and run-history behavior.
+The **ComfyUI** workspace never starts or loads LM Studio. Its Overview snapshot is fetched only when opened or manually refreshed, and its **Unload models** action calls ComfyUI's native memory-release endpoint without touching LM Studio. Create uses the guided essentials flow by default—even after restoring a session—while Advanced retains the complete generic editor. The compact fixed Run dock stays reachable above the bottom navigation without removing the final controls from the page's scroll range.
 
 The **LM Studio** workspace does not require a ComfyUI workflow. It can load any installed LM Studio LLM, including text-only models, with one inference slot and a selectable 4K–32K context plus a 5–60 minute idle unload. Chat history, custom system instructions, sampling controls, and optional image attachments stay in browser memory for the current tab. **Unload model** keeps the lightweight server ready for another model; **Stop runtime** unloads models and closes the server and headless daemon.
 
@@ -90,7 +91,7 @@ LM Studio presets remain local in `%USERPROFILE%\.lmstudio\config-presets`. Prom
 ## Queue, recovery, and lightweight operation
 
 - The **Queue** tab loads detailed jobs only when you open it or tap **Refresh**. Its actions can stop the current run, remove individual pending jobs, clear pending jobs, or re-submit a pending job at the front of the queue.
-- The **Gallery** shows the last 5 generations of image and video output references, grouped by run. Run-history settings still keep the last 16 dashboard runs locally on the phone/browser. It stores workflow JSON and output references only—never output image or video data—and lets you queue a saved run first.
+- The **Gallery** shows the last 5 generations of image and video output references, grouped by run. If media references are missing but saved settings remain, Gallery reports those states separately. Run history keeps the last 16 dashboard runs locally on the phone/browser, stores workflow JSON and output references only—never output image or video data—and confirms before clearing them.
 - The active Create-tab workflow and input values survive a browser refresh or tab discard locally. Prompt Studio images, instructions, and generated prompts stay in session memory only.
 - An active dashboard prompt ID and the tab's ComfyUI WebSocket client ID survive a browser refresh. The dashboard performs one small history and queue lookup on restoration, restores the running state immediately, and receives progress and preview again on the next ComfyUI update. A single five-second fallback history check covers missed completion events; it does not run a repeating poll.
 - Images are lazy-loaded and the dashboard does not prefetch ComfyUI history, output folders, thumbnails, hardware telemetry, or the multi-megabyte global node catalog. Node metadata is fetched only for classes used by the workflow you open. This is deliberate so generation retains CPU, RAM, and GPU headroom.

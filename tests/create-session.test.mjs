@@ -14,7 +14,7 @@ test("invalid payloads fall back to the demo Create-tab session", () => {
   }
 });
 
-test("restores workflow inputs, name, filters, and tab", () => {
+test("restores workflow inputs and reopens the guided essentials view", () => {
   const workflow = {
     "3": { class_type: "KSampler", inputs: { seed: 99, steps: 12 }, _meta: { controlAfterGenerate: { seed: "increment" } } },
   };
@@ -27,7 +27,7 @@ test("restores workflow inputs, name, filters, and tab", () => {
   });
   assert.equal(session.restored, true);
   assert.equal(session.workflowName, "Custom image workflow");
-  assert.equal(session.essentialsOnly, false);
+  assert.equal(session.essentialsOnly, true);
   assert.equal(session.search, "seed");
   assert.equal(session.activeTab, "create");
   assert.equal(session.workflow["3"].inputs.seed, 99);

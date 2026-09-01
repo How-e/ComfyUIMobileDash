@@ -36,7 +36,9 @@ export function parseCreateSession(raw) {
   return {
     workflow: clone(raw.workflow),
     workflowName: typeof raw.workflowName === "string" && raw.workflowName.trim() ? raw.workflowName : fallback.workflowName,
-    essentialsOnly: typeof raw.essentialsOnly === "boolean" ? raw.essentialsOnly : fallback.essentialsOnly,
+    // Restored workflows always reopen in the guided mobile path. Advanced is an
+    // explicit per-session choice so a dense prior view never becomes the default.
+    essentialsOnly: true,
     search: typeof raw.search === "string" ? raw.search : fallback.search,
     activeTab: TABS.has(raw.activeTab) ? raw.activeTab : fallback.activeTab,
     restored: true,
