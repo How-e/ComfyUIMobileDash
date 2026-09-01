@@ -97,9 +97,9 @@ test("restores every dynamic rgthree Power Lora row as an editable API input", (
   assert.equal(isLoraInputValue({ lora: "missing-fields.safetensors" }), false);
 });
 
-test("restores named Power Lora rows used by the MiniMax custom prompt workflow", () => {
-  const first = { on: true, lora: "minimax-style.safetensors", strength: 1, strengthTwo: null };
-  const second = { on: false, lora: "minimax-motion.safetensors", strength: 0.8, strengthTwo: null };
+test("restores named Power Lora rows used by custom workflows", () => {
+  const first = { on: true, lora: "custom-style.safetensors", strength: 1, strengthTwo: null };
+  const second = { on: false, lora: "custom-motion.safetensors", strength: 0.8, strengthTwo: null };
   const workflow = {
     nodes: [
       { id: 1, type: "ModelLoader", mode: 0, widgets_values: ["model.safetensors"] },
@@ -285,6 +285,32 @@ test("applyControlAfterGenerate mutates listed seed fields after queue", () => {
   assert.ok(randomized >= 0 && randomized < 1e15);
 });
 
+test("expands generic subgraphs and preserves promoted dotted input names", () => {
+  const workflow = {
+    nodes: [
+      { id: 1, type: "generic-subgraph", mode: 0, widgets_values_named: { duration: 2.5 }, inputs: [] },
+      { id: 2, type: "OutputNode", mode: 0, inputs: [{ name: "value", type: "FLOAT", link: 200 }] },
+    ],
+    links: [[200, 1, 0, 2, 0, "FLOAT"]],
+    definitions: { subgraphs: [{
+      id: "generic-subgraph",
+      inputs: [{ name: "duration", type: "FLOAT" }],
+      outputs: [{ name: "result", type: "FLOAT" }],
+      nodes: [{ id: 10, type: "MathNode", mode: 0, inputs: [{ name: "values.a", type: "FLOAT", link: 100 }] }],
+      links: [[100, -10, 0, 10, 0, "FLOAT"], [101, 10, 0, -20, 0, "FLOAT"]],
+    }] },
+  };
+  const info = {
+    MathNode: { input: { required: { "values.a": ["FLOAT"] } }, output: ["FLOAT"] },
+    OutputNode: { output_node: true, input: { required: { value: ["FLOAT"] } } },
+  };
+  const prompt = convertCanvasWorkflow(workflow, info);
+  assert.equal(prompt["1:10"].inputs["values.a"], 2.5);
+  assert.equal("values" in prompt["1:10"].inputs, false);
+  assert.equal(prompt["1:10"]._meta.inputLabels["values.a"], "duration");
+  assert.deepEqual(prompt["2"].inputs.value, ["1:10", 0]);
+});
+
 async function load(name) {
   if (!workflowRoot) throw new Error("No ComfyUI workflow directory was found");
   return JSON.parse((await readFile(new URL(name.replaceAll("%", "%25"), workflowRoot), "utf8")).replace(/^\uFEFF/, ""));
@@ -318,50 +344,6 @@ function missingRequired(prompt, objectInfo) {
       .map((name) => `${id}:${node.class_type}.${name}`);
   });
 }
-
-test("converts the saved MiniMax H3 subgraph workflow", async (t) => {
-  if (!await integrationReady(t)) return;
-  const workflow = await load("MiniMax H3 - I2V - BALANCED - RTX 4080 12GB.json");
-  const objectInfo = await getObjectInfo(workflow);
-  const prompt = convertCanvasWorkflow(workflow, objectInfo);
-  assert.ok(Object.values(prompt).some((node) => node.class_type === "LoadImage"));
-  assert.ok(Object.values(prompt).some((node) => node.class_type === "LoraLoaderModelOnly"));
-  assert.ok(Object.values(prompt).some((node) => Object.values(node._meta?.inputLabels || {}).includes("duration")));
-  const math = Object.values(prompt).find((node) => node.class_type === "ComfyMathExpression");
-  const duration = Object.entries(prompt).find(([, node]) => node.class_type === "PrimitiveFloat")?.[0];
-  assert.ok(math, "converted workflow should retain its duration expression");
-  assert.deepEqual(math.inputs["values.a"], [duration, 0]);
-  assert.equal("values" in math.inputs, false, "dotted ComfyUI input names must remain literal keys");
-  assert.equal(Object.values(prompt).some((node) => /^[0-9a-f-]{36}$/i.test(node.class_type)), false);
-  assert.deepEqual(missingRequired(prompt, objectInfo), []);
-});
-
-test("converts the active Qwen Image Edit 2509 branch", async (t) => {
-  if (!await integrationReady(t)) return;
-  const workflow = await load("Qwen Image Edit 2509 - RTX 4080 12GB - FP8 4 Step.json");
-  const objectInfo = await getObjectInfo(workflow);
-  const prompt = convertCanvasWorkflow(workflow, objectInfo);
-  assert.ok(Object.values(prompt).some((node) => node.class_type === "TextEncodeQwenImageEditPlus"));
-  assert.ok(Object.values(prompt).some((node) => node.class_type === "LoraLoaderModelOnly"));
-  assert.ok(Object.values(prompt).some((node) => node.class_type === "LoadImage"));
-  assert.deepEqual(missingRequired(prompt, objectInfo), []);
-});
-
-test("converts every saved Qwen and MiniMax workflow with complete server inputs", async (t) => {
-  if (!await integrationReady(t)) return;
-  const names = (await readdir(workflowRoot)).filter((name) => /qwen|minimax/i.test(name) && name.endsWith(".json"));
-  assert.ok(names.length >= 12, "the installed Qwen and MiniMax workflow set should be present");
-  for (const name of names) {
-    const workflow = await load(name);
-    const objectInfo = await getObjectInfo(workflow);
-    const prompt = convertCanvasWorkflow(workflow, objectInfo);
-    assert.deepEqual(missingRequired(prompt, objectInfo), [], `${name} should preserve every required server input`);
-    const unsupported = Object.entries(prompt).flatMap(([id, node]) => Object.entries(node.inputs || {})
-      .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value) && !isLoraInputValue(value))
-      .map(([key]) => `${id}:${node.class_type}.${key}`));
-    assert.deepEqual(unsupported, [], `${name} should not expose unsupported object-valued generation controls`);
-  }
-});
 
 test("converts every saved workflow with complete required custom-node inputs", async (t) => {
   if (!await integrationReady(t)) return;

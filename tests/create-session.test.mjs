@@ -20,13 +20,13 @@ test("restores workflow inputs, name, filters, and tab", () => {
   };
   const session = parseCreateSession({
     workflow,
-    workflowName: "MiniMax H3",
+    workflowName: "Custom image workflow",
     essentialsOnly: false,
     search: "seed",
     activeTab: "create",
   });
   assert.equal(session.restored, true);
-  assert.equal(session.workflowName, "MiniMax H3");
+  assert.equal(session.workflowName, "Custom image workflow");
   assert.equal(session.essentialsOnly, false);
   assert.equal(session.search, "seed");
   assert.equal(session.activeTab, "create");

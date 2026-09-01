@@ -10,8 +10,9 @@ This guide provides context, architectural constraints, and operational rules fo
 
 - **Frontend**: Preact + Vite (`src/`), styled with clean CSS (`src/styles.css`), touch-optimized controls, mobile sheet dialogs, and SVG icons from `lucide-preact`.
 - **Backend / Proxy Plugin**: Node.js Vite plugin (`server/localAiController.mjs`) providing same-origin local proxying to ComfyUI and headless LM Studio (`llmster` runtime).
+- **Compatibility Direction**: Comfy Deck is model- and node-agnostic. Never scope general workflow support to named model families. Discover inputs from the live ComfyUI schema and preserve generic behavior for every installed core node, custom node, model, and workflow.
 - **Core Modules**:
-  - `src/workflowAdapter.js`: Normalizes API and canvas workflows, handles dynamic node types (rgthree Power LoRA, VHS video combine, KSampler seeds, MiniMax subgraphs).
+  - `src/workflowAdapter.js`: Normalizes API and canvas workflows, handles schema-driven inputs, dynamic node types, conditional settings, seeds, structured values, and promoted subgraph controls.
   - `src/livePreview.js`: Binary WebSocket preview decoding and state restoration.
   - `src/galleryMedia.js`: Grouped run history, video/image inference, deduplication.
   - `src/createSession.js`: Local tab persistence and recovery.

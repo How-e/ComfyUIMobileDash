@@ -4,6 +4,8 @@
 
 Standard ComfyUI node canvases are heavy desktop web apps designed for mouse navigation and large monitors. Operating complex spaghetti node graphs on a mobile touchscreen is cumbersome, error-prone, and consumes excessive device memory. **Comfy Deck** transforms your ComfyUI workflows and local LM Studio models into clean, responsive, touch-optimized controls. Engineered with Preact and zero bloated dependencies, it stays ultra-lightweight and out of the way—ensuring all host and device compute, RAM, and GPU resources remain completely dedicated to running your AI models.
 
+Comfy Deck is model- and node-agnostic. It discovers the input schema for every node class used by an opened workflow through ComfyUI's live API, so compatibility follows the models, core nodes, and custom nodes installed in ComfyUI rather than a hardcoded list of model families. New workflows and installed custom nodes should expose their editable inputs and settings automatically while linked graph inputs remain protected.
+
 ## Start
 
 1. Start ComfyUI with LAN access (`--listen`).
@@ -41,7 +43,8 @@ The application does not need a filesystem path to ComfyUI during normal use; it
 - An independent LM Studio workspace for installed text and vision models, local presets, bounded context and idle-unload settings, session-only chat, optional image input, model-only unload, and full headless-runtime shutdown.
 - Lists workflows directly from ComfyUI's saved workflow library.
 - Converts both canvas workflows and API-format workflows into runnable touch controls.
-- Expands modern ComfyUI subgraphs, including the promoted MiniMax H3 controls.
+- Expands modern ComfyUI subgraphs and exposes their promoted controls generically.
+- Uses each installed node's live ComfyUI schema to transfer editable variables, inputs, and settings into the dashboard, including structured custom-node settings.
 - Protects linked node inputs from accidental edits.
 - Prioritizes image inputs, prompts, LoRAs, duration, and sampling controls.
 - Sampler seeds support ComfyUI control-after-generate (fixed / increment / decrement / randomize) in the Create tab.
